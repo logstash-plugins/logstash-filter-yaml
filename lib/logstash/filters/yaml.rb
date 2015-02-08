@@ -12,7 +12,6 @@ require "logstash/timestamp"
 class LogStash::Filters::Yaml < LogStash::Filters::Base
 
   config_name "yaml"
-  milestone 1
 
   # The configuration for the YAML filter:
   # [source,ruby]
@@ -58,8 +57,6 @@ class LogStash::Filters::Yaml < LogStash::Filters::Base
     @logger.debug("Running yaml filter", :event => event)
 
     return unless event.include?(@source)
-
-    # TODO(colin) this field merging stuff below should be handled in Event.
 
     source = event[@source]
     if @target.nil?
