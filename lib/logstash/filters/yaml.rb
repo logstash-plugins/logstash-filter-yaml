@@ -59,16 +59,18 @@ class LogStash::Filters::Yaml < LogStash::Filters::Base
     return unless event.include?(@source)
 
     source = event[@source]
+
     if @target.nil?
       # Default is to write to the root of the event.
       dest = event.to_hash
     else
       if @target == @source
         # Overwrite source
-        dest = event[@target] = {}
+        event[@target] = {}
       else
-        dest = event[@target] ||= {}
+        event[@target] ||= {}
       end
+      dest = event[@target]
     end
 
     begin
@@ -83,7 +85,9 @@ class LogStash::Filters::Yaml < LogStash::Filters::Base
 
       filter_matched(event)
     rescue => e
-      event.tag("_yamlparsefailure")
+      tag = "_yamlparsefailure"
+      event["tags"] ||= []
+      event["tags"] << tag unless event["tags"].include?(tag)
       @logger.warn("Trouble parsing yaml", :source => @source,
                    :raw => event[@source], :exception => e)
       return
