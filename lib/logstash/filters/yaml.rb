@@ -1,4 +1,5 @@
 # encoding: utf-8
+require "logstash-core"
 require "logstash/filters/base"
 require "logstash/namespace"
 require "logstash/timestamp"
@@ -58,42 +59,43 @@ class LogStash::Filters::Yaml < LogStash::Filters::Base
 
     return unless event.include?(@source)
 
-    source = event[@source]
-
-    if @target.nil?
-      # Default is to write to the root of the event.
-      dest = event.to_hash
-    else
-      if @target == @source
-        # Overwrite source
-        event[@target] = {}
-      else
-        event[@target] ||= {}
-      end
-      dest = event[@target]
-    end
+    source = event.get(@source)
 
     begin
-      dest.merge!(YAML::load(source))
-
-      # If no target, we target the root of the event object. This can allow
-      # you to overwrite @timestamp and this will typically happen for yaml
-      # LogStash Event deserialized here.
-      if !@target && event.timestamp.is_a?(String)
-        event.timestamp = LogStash::Timestamp.parse_iso8601(event.timestamp)
-      end
-
-      filter_matched(event)
+      unmarshalled = YAML::load(source)
     rescue => e
-      tag = "_yamlparsefailure"
-      event["tags"] ||= []
-      event["tags"] << tag unless event["tags"].include?(tag)
+      event.tag("_yamlparsefailure")
       @logger.warn("Trouble parsing yaml", :source => @source,
-                   :raw => event[@source], :exception => e)
+                   :raw => event.get(@source), :exception => e.message)
       return
     end
 
-    @logger.debug("Event after yaml filter", :event => event)
+    if @target.nil?
+      # Default is to write to the root of the event.
+      # so we need to take the event's data merge in the yaml
+      # create a new event and cancel the previous one
+      dest = event.to_hash_with_metadata
+      dest.merge!(unmarshalled)
+      event.overwrite(LogStash::Event.new(dest))
+    else
+      if @target == @source
+        # Overwrite source
+        event.set(@target, {})
+      else
+        event.set(@target, {}) unless event.get(@target)
+      end
+      event.set(@target, unmarshalled)
+    end
+
+    # If no target, we target the root of the event object. This can allow
+    # you to overwrite @timestamp and this will typically happen for yaml
+    # LogStash Event deserialized here.
+    if !@target && event.timestamp.is_a?(String)
+      event.timestamp = LogStash::Timestamp.parse_iso8601(event.timestamp)
+    end
+
+    filter_matched(event)
+    @logger.debug("Event after yaml filter", :event => event.inspect)
 
   end # def filter
 
