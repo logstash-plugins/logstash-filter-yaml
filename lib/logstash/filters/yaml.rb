@@ -65,7 +65,7 @@ class LogStash::Filters::Yaml < LogStash::Filters::Base
       unmarshalled = YAML::load(source)
     rescue => e
       event.tag("_yamlparsefailure")
-      @logger.warn("Trouble parsing yaml", :source => @source,
+      @logger.warn("Error parsing yaml", :source => @source,
                    :raw => event.get(@source), :exception => e.message)
       return
     end
