@@ -95,7 +95,7 @@ class LogStash::Filters::Yaml < LogStash::Filters::Base
     end
 
     filter_matched(event)
-    @logger.debug("Event after yaml filter", :event => event.inspect)
+    @logger.debug? && @logger.debug("Event after yaml filter", :event => event.inspect)
 
   end # def filter
 
