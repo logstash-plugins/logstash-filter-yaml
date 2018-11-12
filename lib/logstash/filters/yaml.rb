@@ -62,7 +62,7 @@ class LogStash::Filters::Yaml < LogStash::Filters::Base
     source = event.get(@source)
 
     begin
-      unmarshalled = YAML::load(source)
+      parsed = YAML::load(source)
     rescue => e
       event.tag("_yamlparsefailure")
       @logger.warn("Error parsing yaml", :source => @source,
@@ -70,33 +70,41 @@ class LogStash::Filters::Yaml < LogStash::Filters::Base
       return
     end
 
-    if @target.nil?
-      # Default is to write to the root of the event.
-      # so we need to take the event's data merge in the yaml
-      # create a new event and cancel the previous one
-      dest = event.to_hash_with_metadata
-      dest.merge!(unmarshalled)
-      event.overwrite(LogStash::Event.new(dest))
+    if @target
+      event.set(@target, parsed)
     else
-      if @target == @source
-        # Overwrite source
-        event.set(@target, {})
-      else
-        event.set(@target, {}) unless event.get(@target)
+      unless parsed.is_a?(Hash)
+        event.tag("_yamlparsefailure")
+        @logger.warn("Parsed YAML object/hash requires a target configuration option", :source => @source, :raw => source)
+        return
       end
-      event.set(@target, unmarshalled)
-    end
 
-    # If no target, we target the root of the event object. This can allow
-    # you to overwrite @timestamp and this will typically happen for yaml
-    # LogStash Event deserialized here.
-    if !@target && event.timestamp.is_a?(String)
-      event.timestamp = LogStash::Timestamp.parse_iso8601(event.timestamp)
+      # The following logic was copied from Json filter
+      # a) since the parsed hash will be set in the event root, first extract any @timestamp field to properly initialized it
+      parsed_timestamp = parsed.delete(LogStash::Event::TIMESTAMP)
+      begin
+        timestamp = parsed_timestamp ? LogStash::Timestamp.coerce(parsed_timestamp) : nil
+      rescue LogStash::TimestampParserError => e
+        timestamp = nil
+      end
+
+      # b) then set all parsed fields in the event
+      parsed.each{|k, v| event.set(k, v)}
+
+      # c) finally re-inject proper @timestamp
+      if parsed_timestamp
+        if timestamp
+          event.timestamp = timestamp
+        else
+          event.timestamp = LogStash::Timestamp.new
+          @logger.warn("Unrecognized #{LogStash::Event::TIMESTAMP} value, setting current time to #{LogStash::Event::TIMESTAMP}, original in #{LogStash::Event::TIMESTAMP_FAILURE_FIELD} field", :value => parsed_timestamp.inspect)
+          event.tag(LogStash::Event::TIMESTAMP_FAILURE_TAG)
+          event.set(LogStash::Event::TIMESTAMP_FAILURE_FIELD, parsed_timestamp.to_s)
+        end
+      end
     end
 
     filter_matched(event)
     @logger.debug? && @logger.debug("Event after yaml filter", :event => event.inspect)
-
   end # def filter
-
 end # class LogStash::Filters::Yaml
