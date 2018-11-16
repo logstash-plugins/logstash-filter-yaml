@@ -44,11 +44,12 @@ describe LogStash::Filters::Yaml do
 
   describe "testing @timestamp" do
     let(:config) { { "source" => "message" } }
-    let(:data) { { "message" => "{ \"@timestamp\": \"2013-10-19T00:14:32.996Z\" }"  } }
+    let(:date) { "2013-10-19T00:14:32.996Z" }
+    let(:data) { { "message" => "{ \"@timestamp\": \"#{date}\" }"  } }
     it "parses correctly" do
       subject.filter(event)
       expect(event.timestamp).to be_a(LogStash::Timestamp)
-      expect(YAML::dump(event.timestamp)).to eq("--- !ruby/object:LogStash::Timestamp\ntime: 2013-10-19 00:14:32.996000000 Z\n")
+      expect(event.timestamp.to_s).to eq(date)
     end
   end
 
